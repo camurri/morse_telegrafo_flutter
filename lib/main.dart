@@ -178,7 +178,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
       }
     }
 
-    _pauseTimer = Timer(const Duration(milliseconds: 700), _decodeMorse);
+    _pauseTimer = Timer(const Duration(milliseconds: 350), _decodeMorse);
   }
 
   Future<void> _blinkCharacterLed(String morseSymbol) async {
@@ -279,8 +279,8 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
               onTapDown: _onTapDown,
               onTapUp: _onTapUp,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 100,
+                duration: const Duration(milliseconds: 1000),
+                height: 50,
                 decoration: BoxDecoration(
                   color: _isPlayingTone ? Colors.green : Colors.blueAccent,
                   borderRadius: BorderRadius.circular(16),
@@ -319,7 +319,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 const Text('Código Morse:', style: TextStyle(fontSize: 20, color: Colors.lightBlue)),
                 ElevatedButton.icon(
                   onPressed: _clearAll,
-                  icon: const Icon(Icons.clear, color: Colors.purpleAccent),
+                  icon: const Icon(Icons.clear, color: Colors.red),
                   label: const Text('Limpar', style: TextStyle(color: Colors.blue)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
@@ -335,7 +335,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
             const SizedBox(height: 4),
             Text(
               _morseSequence,
-              style: const TextStyle(fontSize: 36, color: Colors.lightBlue),
+              style: const TextStyle(fontSize: 35, color: Colors.lightBlue),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -387,12 +387,21 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
               ),
               textAlign: TextAlign.center,
             ),
-            LedIndicator(
-              isOn: _blinkCharLed,
-              onColor: Colors.purpleAccent,
-              offColor: const Color(0xFF250032),
-              size: 12, // LED pequena e discreta
-            ),
+
+            Center(child:
+            Row(children: [
+              Text('Rx', style: TextStyle(color: Colors.lightBlue),),
+              const SizedBox(width: 10),
+              LedIndicator(
+                isOn: _blinkCharLed,
+                onColor: Colors.amber,
+                offColor: const Color(0xFF250032),
+                size: 8, // LED pequena e discreta
+              ),
+
+            ],),
+                ),
+
 
 
             const SizedBox(height: 24),
