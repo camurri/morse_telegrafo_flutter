@@ -10,7 +10,7 @@ class LedIndicator extends StatelessWidget {
   const LedIndicator({
     super.key,
     required this.isOn,
-    this.onColor = Colors.red,
+    this.onColor = Colors.amber,
     this.offColor = const Color(0xFF424242), // cinza escuro padrão
     this.size = 24.0,
   });

@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:async';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:vibration/vibration.dart';
 
-// LedIndicator reutilizável
+bool _showedLimitSnackBar = false;
+
 class LedIndicator extends StatelessWidget {
   final bool isOn;
   final Color onColor;
@@ -10,12 +14,12 @@ class LedIndicator extends StatelessWidget {
   final double size;
 
   const LedIndicator({
-    Key? key,
+    super.key,
     required this.isOn,
-    this.onColor = Colors.red,
-    this.offColor = const Color(0xFF333333),
+    this.onColor = Colors.amber,
+    this.offColor = const Color(0xFF572525),
     this.size = 20,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -40,8 +44,7 @@ class LedIndicator extends StatelessWidget {
   }
 }
 
-void main() => runApp(
-    const MorseWithButtonApp());
+void main() => runApp(const MorseWithButtonApp());
 
 class MorseWithButtonApp extends StatelessWidget {
   const MorseWithButtonApp({super.key});
@@ -78,32 +81,24 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
   bool _isPlayingTone = false;
 
   final Map<String, String> _morseToLetter = {
-    // Letras A–Z
-    '.-': 'A',    '-...': 'B',  '-.-.': 'C',  '-..': 'D',   '.': 'E',
-    '..-.': 'F',  '--.': 'G',   '....': 'H',  '..': 'I',    '.---': 'J',
-    '-.-': 'K',   '.-..': 'L',  '--': 'M',    '-.': 'N',    '---': 'O',
-    '.--.': 'P',  '--.-': 'Q',  '.-.': 'R',   '...': 'S',   '-': 'T',
-    '..-': 'U',   '...-': 'V',  '.--': 'W',   '-..-': 'X',  '-.--': 'Y',
+    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
     '--..': 'Z',
-
-    // Números 0–9
     '-----': '0', '.----': '1', '..---': '2', '...--': '3', '....-': '4',
     '.....': '5', '-....': '6', '--...': '7', '---..': '8', '----.': '9',
-
-    // Símbolos comuns
-    '.-.-.-': '.',  '--..--': ',',  '..--..': '?',  '.----.': "'",
-    '-.-.--': '!',  '-..-.': '/',   '-.--.': '(',   '-.--.-': ')',
-    '.-...': '&',   '---...': ':',  '-.-.-.': ';',  '-...-': '=',
-    '.-.-.': '+',   '-....-': '-',  '..--.-': '_',  '.-..-.': '"',
-    '...-..-': '\$', '.--.-.': '@',
-
-    // Espaço entre palavras
-    '/': ' '
+    '.-.-.-': '.', '--..--': ',', '..--..': '?', '.----.': "'",
+    '-.-.--': '!', '-..-.': '/', '-.--.': '(', '-.--.-': ')',
+    '.-...': '&', '---...': ':', '-.-.-.': ';', '-...-': '=',
+    '.-.-.': '+', '-....-': '-', '..--.-': '_', '.-..-.': '"',
+    '...-..-': '\$', '.--.-.': '@', '/': ' '
   };
 
   String _selectedTone = 'tone_500.wav';
 
-  Map<String, String> _toneOptions = {
+  final Map<String, String> _toneOptions = {
     'tone_500.wav': 'Militar (500 Hz)',
     'tone_700.wav': 'Estudante (700 Hz)',
     'tone_900.wav': 'Radioamador (900 Hz)',
@@ -111,9 +106,13 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
   };
 
   Future<void> _startTone() async {
-    await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
     await _audioPlayer.play(AssetSource('sounds/$_selectedTone'));
     setState(() => _isPlayingTone = true);
+
+    Timer(const Duration(milliseconds: 600), () {
+      if (_isPlayingTone) _stopTone();
+    });
   }
 
   Future<void> _stopTone() async {
@@ -121,20 +120,34 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     setState(() => _isPlayingTone = false);
   }
 
-  void _onTapDown(_) {
+  Future<void> vibrateShort() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      if (kDebugMode) print('Dispositivo suporta vibração. Vibrando...');
+      await Vibration.vibrate(duration: 80);
+    } else {
+      if (kDebugMode) print('Dispositivo não suporta vibração.');
+    }
+  }
+
+  Future<void> _onTapDown(_) async {
     _pressStartTime = DateTime.now();
     _pauseTimer?.cancel();
     _startTone();
+    await vibrateShort();
   }
 
   void _onTapUp(_) {
     final duration = DateTime.now().difference(_pressStartTime!);
     _stopTone();
 
-    setState(() {
-      if (_morseSequence.length < 6) {
+    if (_morseSequence.length < 6) {
+      setState(() {
         _morseSequence += duration.inMilliseconds < 300 ? '.' : '-';
-      } else {
+        _showedLimitSnackBar = false;
+      });
+    } else {
+      if (!_showedLimitSnackBar) {
+        _showedLimitSnackBar = true;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.black,
@@ -144,12 +157,10 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
             ),
           ),
         );
-
-
       }
-    });
+    }
 
-    _pauseTimer = Timer(const Duration(seconds: 2), _decodeMorse);
+    _pauseTimer = Timer(const Duration(milliseconds: 700), _decodeMorse);
   }
 
   void _decodeMorse() {
@@ -180,6 +191,21 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     });
   }
 
+  Map<String, Color> getLedColors() {
+    switch (_selectedTone) {
+      case 'tone_500.wav':
+        return {'on': Colors.red, 'off': const Color(0xFF330000)};
+      case 'tone_700.wav':
+        return {'on': Colors.amber, 'off': const Color(0xFF4A3A00)};
+      case 'tone_900.wav':
+        return {'on': Colors.green, 'off': const Color(0xFF003300)};
+      case 'tone_long.wav':
+        return {'on': Colors.blue, 'off': const Color(0xFF001133)};
+      default:
+        return {'on': Colors.white, 'off': const Color(0xFF333333)};
+    }
+  }
+
   @override
   void dispose() {
     _audioPlayer.dispose();
@@ -189,11 +215,14 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ledColors = getLedColors();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Tradutor Telegrafista')),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             GestureDetector(
               onTapDown: _onTapDown,
@@ -201,14 +230,13 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 height: 100,
-                width: double.infinity,
                 decoration: BoxDecoration(
                   color: _isPlayingTone ? Colors.green : Colors.blueAccent,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: _isPlayingTone
                       ? [
                     BoxShadow(
-                      color: Colors.greenAccent.withAlpha((0.6 * 255).round()),
+                      color: Colors.greenAccent.withOpacity(0.6),
                       spreadRadius: 4,
                       blurRadius: 12,
                     ),
@@ -216,12 +244,16 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                       : [],
                 ),
                 alignment: Alignment.center,
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.cell_tower, color: Colors.white, size: 28),
-                    SizedBox(width: 12),
-                    Text(
+                    Icon(
+                      _isPlayingTone ? FontAwesomeIcons.towerCell : FontAwesomeIcons.towerCell,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
                       'Segure para Telegrafar',
                       style: TextStyle(fontSize: 22, color: Colors.white),
                     ),
@@ -229,24 +261,44 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 32),
-
+            const SizedBox(height: 28),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Código Morse: $_morseSequence', style: const TextStyle(fontSize: 20)),
-                ElevatedButton(onPressed: _clearAll, child: const Text('Limpar')),
+                const Text('Código Morse:', style: TextStyle(fontSize: 20, color: Colors.lightBlue)),
+                ElevatedButton.icon(
+                  onPressed: _clearAll,
+                  icon: const Icon(Icons.clear, color: Colors.purpleAccent),
+                  label: const Text('Limpar', style: TextStyle(color: Colors.blue)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Colors.blue, width: 2),
+                    ),
+                  ),
+                ),
               ],
             ),
-
-            const SizedBox(height: 20),
-
+            const SizedBox(height: 4),
+            Text(
+              _morseSequence,
+              style: const TextStyle(fontSize: 36, color: Colors.lightBlue),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text('Sinal: ', style: TextStyle(fontSize: 16)),
-                LedIndicator(isOn: _isPlayingTone, onColor: Colors.red, size: 24),
-                const SizedBox(width: 8),
+                LedIndicator(
+                  isOn: _isPlayingTone,
+                  onColor: ledColors['on']!,
+                  offColor: ledColors['off']!,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
                 DropdownButton<String>(
                   value: _selectedTone,
                   items: _toneOptions.entries.map((entry) {
@@ -263,41 +315,29 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 ),
               ],
             ),
-
-            const SizedBox(height: 12),
-
+            const SizedBox(height: 24),
             Text.rich(
               TextSpan(
                 children: [
                   const TextSpan(
                     text: 'Caractere: ',
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   TextSpan(
                     text: _translatedLetter,
                     style: TextStyle(
-                      fontSize: 36,
+                      fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: _translatedLetter == '?' ? Colors.red : Colors.green,
                     ),
                   ),
                 ],
               ),
+              textAlign: TextAlign.center,
             ),
-
-
-
             const SizedBox(height: 24),
-
-            const Text(
-              'Histórico:',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-
+            const Text('Histórico:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
@@ -308,35 +348,30 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 ),
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // Botão redondo simples estilo "segure para telegrar" mas redondo
-            GestureDetector(
-              onTapDown: _onTapDown,
-              onTapUp: _onTapUp,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 80,
-                width: 80,
-                decoration: BoxDecoration(
-                  color: _isPlayingTone ? Colors.green : Colors.blueAccent,
-                  shape: BoxShape.circle,
-                  boxShadow: _isPlayingTone
-                      ? [
-                    BoxShadow(
-                      color: Colors.greenAccent.withAlpha((0.6 * 255).round()),
-                      spreadRadius: 4,
-                      blurRadius: 12,
-                    ),
-                  ]
-                      : [],
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.radio_button_checked,
-                  size: 40,
-                  color: Colors.white,
+            const SizedBox(height: 16),
+            Center(
+              child: GestureDetector(
+                onTapDown: _onTapDown,
+                onTapUp: _onTapUp,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 80,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: _isPlayingTone ? Colors.green : Colors.blueAccent,
+                    shape: BoxShape.circle,
+                    boxShadow: _isPlayingTone
+                        ? [
+                      BoxShadow(
+                        color: Colors.greenAccent.withOpacity(0.6),
+                        spreadRadius: 4,
+                        blurRadius: 12,
+                      ),
+                    ]
+                        : [],
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.radio_button_checked, size: 40, color: Colors.white),
                 ),
               ),
             ),
