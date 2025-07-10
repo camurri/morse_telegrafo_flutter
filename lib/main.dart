@@ -40,7 +40,8 @@ class LedIndicator extends StatelessWidget {
   }
 }
 
-void main() => runApp(const MorseWithButtonApp());
+void main() => runApp(
+    const MorseWithButtonApp());
 
 class MorseWithButtonApp extends StatelessWidget {
   const MorseWithButtonApp({super.key});
@@ -48,6 +49,7 @@ class MorseWithButtonApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Morse + Telégrafo',
       theme: ThemeData.dark(),
       home: const MorseTranslatorPage(),
@@ -134,8 +136,16 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
         _morseSequence += duration.inMilliseconds < 300 ? '.' : '-';
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Limite de sinais alcançado. Aguarde a tradução.')),
+          const SnackBar(
+            backgroundColor: Colors.black,
+            content: Text(
+              'Limite de sinais alcançado. Aguarde a tradução.',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
         );
+
+
       }
     });
 
@@ -256,10 +266,30 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
 
             const SizedBox(height: 12),
 
-            Text(
-              'Letra: $_translatedLetter',
-              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+            Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                    text: 'Caractere: ',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  TextSpan(
+                    text: _translatedLetter,
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: _translatedLetter == '?' ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
             ),
+
+
 
             const SizedBox(height: 24),
 
