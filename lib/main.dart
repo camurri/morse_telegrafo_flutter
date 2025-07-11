@@ -4,8 +4,17 @@ import 'package:audioplayers/audioplayers.dart';
 import 'dart:async';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:vibration/vibration.dart';
+import 'package:another_flushbar/flushbar.dart';
+import 'package:flutter/services.dart';
 
+const platform = MethodChannel('morse.audio.channel'); // canal de comunicação nativo
 bool _showedLimitSnackBar = false;
+final List<String> _recordedMorse = [];
+bool _isLooping = false;
+const duracaoMorseLED = 400; // milissegundos resposta da led Rx
+const duracaoMorsePonto = 60;
+const duracaoMorseTraco = 400;
+String _loopingMorseDisplay = '';
 
 class LedIndicator extends StatelessWidget {
   final bool isOn;
@@ -60,6 +69,35 @@ class MorseWithButtonApp extends StatelessWidget {
   }
 }
 
+// Future<void> playToneReal(int freqHz, int durationMs) async {
+//   try {
+//     await platform.invokeMethod('playTone', {
+//       'freq': freqHz,
+//       'duration': durationMs,
+//     });
+//   } on PlatformException catch (e) {
+//     debugPrint("Erro ao tocar tom real: ${e.message}");
+//   }
+// }
+
+Future<void> startToneReal(int freqHz) async {
+  try {
+    await platform.invokeMethod('startTone', {'freq': freqHz});
+  } on PlatformException catch (e) {
+    debugPrint("Erro ao iniciar tom real: ${e.message}");
+  }
+}
+
+Future<void> stopToneReal() async {
+  try {
+    await platform.invokeMethod('stopTone');
+  } on PlatformException catch (e) {
+    debugPrint("Erro ao parar tom real: ${e.message}");
+  }
+}
+
+
+
 class MorseTranslatorPage extends StatefulWidget {
   const MorseTranslatorPage({super.key});
 
@@ -70,13 +108,16 @@ class MorseTranslatorPage extends StatefulWidget {
 class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final ScrollController _scrollController = ScrollController();
+  static const int dit = 200; // duração de um ponto
+  static const int dah = dit * 3; // traço
+  static const int intraSymbolPause = dit; // entre . e - da mesma letra
+  static const int interLetterPause = dit * 3;
+  static const int interWordPause = dit * 7;
   bool _blinkCharLed = false;
-
 
   DateTime? _pressStartTime;
   Timer? _pauseTimer;
   bool _blinkLastCharLed = false;
-
 
   String _morseSequence = '';
   String _translatedLetter = '';
@@ -86,30 +127,76 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
 
   final Map<String, String> morseToLetter = {
     // Letras A–Z
-    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
-    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
-    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
-    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
-    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+    '.-': 'A',
+    '-...': 'B',
+    '-.-.': 'C',
+    '-..': 'D',
+    '.': 'E',
+    '..-.': 'F',
+    '--.': 'G',
+    '....': 'H',
+    '..': 'I',
+    '.---': 'J',
+    '-.-': 'K',
+    '.-..': 'L',
+    '--': 'M',
+    '-.': 'N',
+    '---': 'O',
+    '.--.': 'P',
+    '--.-': 'Q',
+    '.-.': 'R',
+    '...': 'S',
+    '-': 'T',
+    '..-': 'U',
+    '...-': 'V',
+    '.--': 'W',
+    '-..-': 'X',
+    '-.--': 'Y',
     '--..': 'Z',
 
     // Números 0–9
-    '-----': '0', '.----': '1', '..---': '2', '...--': '3', '....-': '4',
-    '.....': '5', '-....': '6', '--...': '7', '---..': '8', '----.': '9',
+    '-----': '0',
+    '.----': '1',
+    '..---': '2',
+    '...--': '3',
+    '....-': '4',
+    '.....': '5',
+    '-....': '6',
+    '--...': '7',
+    '---..': '8',
+    '----.': '9',
 
     // Pontuação e símbolos
-    '.-.-.-': '.', '--..--': ',', '..--..': '?', '.----.': "'",
-    '-.-.--': '!', '-..-.': '/', '-.--.': '(', '-.--.-': ')',
-    '.-...': '&', '---...': ':', '-.-.-.': ';', '-...-': '=',
-    '.-.-.': '+', '-....-': '-', '..--.-': '_', '.-..-.': '"',
-    '...-..-': '\$', '.--.-.': '@', '/': ' ',
+    '.-.-.-': '.',
+    '--..--': ',',
+    '..--..': '?',
+    '.----.': "'",
+    '-.-.--': '!',
+    '-..-.': '/',
+    '-.--.': '(',
+    '-.--.-': ')',
+    '.-...': '&',
+    '---...': ':',
+    '-.-.-.': ';',
+    '-...-': '=',
+    '.-.-.': '+',
+    '-....-': '-',
+    '..--.-': '_',
+    '.-..-.': '"',
+    '...-..-': '\$',
+    '.--.-.': '@',
+    '/': ' ',
 
     // Letras com acento ou especiais
-    '.--.-': 'Á', '..-..': 'É', '--.--': 'Ñ', '..--': 'Ü', '---.': 'Ö',
-     '.-..-': 'À', '...-.': 'Š', '----': 'CH',
-
+    '.--.-': 'Á',
+    '..-..': 'É',
+    '--.--': 'Ñ',
+    '..--': 'Ü',
+    '---.': 'Ö',
+    '.-..-': 'À',
+    '...-.': 'Š',
+    '----': 'CH',
   };
-
 
   String _selectedTone = 'tone_500.wav';
 
@@ -118,29 +205,38 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     'tone_700.wav': 'Estudante (700 Hz)',
     'tone_900.wav': 'Radioamador (900 Hz)',
     'tone_long.wav': 'DX (1000 Hz)',
+    'tone_real': 'Tom Real (nativo)',
   };
 
   Future<void> _startTone() async {
-    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
-    await _audioPlayer.play(AssetSource('sounds/$_selectedTone'));
-    setState(() => _isPlayingTone = true);
+    await _audioPlayer.stop();
 
-    Timer(const Duration(milliseconds: 600), () {
-      if (_isPlayingTone) _stopTone();
-    });
+    if (_selectedTone == 'tone_real') {
+      await startToneReal(900); // ou use outro valor do dropdown se desejar
+    } else {
+      await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+      await _audioPlayer.play(AssetSource('sounds/$_selectedTone'));
+    }
+
+    setState(() => _isPlayingTone = true);
   }
 
+
+
   Future<void> _stopTone() async {
-    await _audioPlayer.stop();
+    if (_selectedTone == 'tone_real') {
+      await stopToneReal();
+    } else {
+      await _audioPlayer.stop();
+    }
+
     setState(() => _isPlayingTone = false);
   }
 
+
   Future<void> vibrateShort() async {
     if (await Vibration.hasVibrator() ?? false) {
-      //if (kDebugMode) print('Dispositivo suporta vibração. Vibrando...');
       await Vibration.vibrate(duration: 50);
-    } else {
-     // if (kDebugMode) print('Dispositivo não suporta vibração.');
     }
   }
 
@@ -148,37 +244,106 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     _pressStartTime = DateTime.now();
     _pauseTimer?.cancel();
     _startTone();
+    await platform.invokeMethod('startTone', {'freq': 900});
     await vibrateShort();
   }
 
-  void _onTapUp(_) {
+  void _startLoopPlayback() async {
+    setState(() => _isLooping = true);
+
+    for (final morse in _recordedMorse) {
+      if (!_isLooping) return;
+
+      setState(() {
+        _loopingMorseDisplay = morse; // Atualiza o Morse que está tocando
+      });
+
+      if (kDebugMode) {
+        print('Looping Morse: $morse');
+      }
+
+      for (var symbol in morse.split('')) {
+        if (!_isLooping) return;
+        await _playSymbol(symbol);
+      }
+
+      // Atualiza letra traduzida no histórico
+      final translated = morseToLetter[morse] ?? '?';
+      setState(() {
+        _translatedLetter = translated;
+        _history.add(translated);
+      });
+
+      await Future.delayed(Duration(milliseconds: interLetterPause));
+    }
+
+    // Limpa o símbolo após o loop
+    setState(() => _loopingMorseDisplay = '');
+
+    if (_isLooping) _startLoopPlayback();
+  }
+
+  Future<void> _playSymbol(String symbol) async {
+    setState(() {
+      _isPlayingTone = true;
+      _blinkCharLed = true; // Liga LED ao começar
+    });
+
+    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+    await _audioPlayer.play(AssetSource('sounds/$_selectedTone'));
+    await Future.delayed(Duration(milliseconds: symbol == '.' ? dit : dah));
+
+    await _audioPlayer.stop();
+
+    setState(() {
+      _isPlayingTone = false;
+      _blinkCharLed = false; // Apaga LED ao finalizar
+    });
+
+    await Future.delayed(Duration(milliseconds: intraSymbolPause));
+  }
+
+  Future<void> _onTapUp(_) async {
+    //await platform.invokeMethod('stopTone');
+
     final duration = DateTime.now().difference(_pressStartTime!);
     _stopTone();
 
-    if (_morseSequence.length < 6) {
+
+    if (_morseSequence.length < 6) { // limite de 6 sinais
       final signal = duration.inMilliseconds < 300 ? '.' : '-';
+      platform.invokeMethod('stopTone');
       setState(() {
         _morseSequence += signal;
         _showedLimitSnackBar = false;
       });
-      print('Sinal inserido: $signal');
-      print('Sequência atual: $_morseSequence');
+      if (kDebugMode) {
+        print('Sinal inserido: $signal');
+      }
+      if (kDebugMode) {
+        print('Sequência atual: $_morseSequence');
+      }
     } else {
       if (!_showedLimitSnackBar) {
         _showedLimitSnackBar = true;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.black,
-            content: Text(
-              'Limite de sinais alcançado. Aguarde a tradução.',
-              style: TextStyle(color: Colors.red),
-            ),
+        Flushbar(
+          backgroundColor: Colors.black,
+          margin: const EdgeInsets.all(8),
+          borderRadius: BorderRadius.circular(8),
+          flushbarPosition: FlushbarPosition.TOP,
+          messageText: const Text(
+            'Limite de sinais alcançado. Aguarde a tradução.',
+            style: TextStyle(color: Colors.red),
           ),
-        );
+          duration: const Duration(seconds: 2),
+        ).show(context);
       }
     }
 
-    _pauseTimer = Timer(const Duration(milliseconds: 350), _decodeMorse);
+    _pauseTimer = Timer(
+      const Duration(milliseconds: duracaoMorseLED),
+      _decodeMorse,
+    );
   }
 
   Future<void> _blinkCharacterLed(String morseSymbol) async {
@@ -186,8 +351,8 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
       final char = morseSymbol[i];
 
       final duration = char == '.'
-          ? const Duration(milliseconds: 60) // ponto led
-          : const Duration(milliseconds: 400); // traço led
+          ? const Duration(milliseconds: duracaoMorsePonto) // ponto led
+          : const Duration(milliseconds: duracaoMorseTraco); // traço led
 
       setState(() => _blinkCharLed = true);
       await Future.delayed(duration);
@@ -196,10 +361,9 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     }
   }
 
-
-
   void _decodeMorse() {
     final currentSequence = _morseSequence; // salva antes de limpar
+    _recordedMorse.add(_morseSequence);
 
     setState(() {
       _translatedLetter = morseToLetter[_morseSequence] ?? '?';
@@ -220,15 +384,14 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     });
   }
 
-
-
-
   void _clearAll() {
     _pauseTimer?.cancel();
     setState(() {
       _morseSequence = '';
       _translatedLetter = '';
       _history.clear();
+      _loopingMorseDisplay = '';
+      _isLooping = false;
     });
   }
 
@@ -240,7 +403,6 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
       });
     }
   }
-
 
   Map<String, Color> getLedColors() {
     switch (_selectedTone) {
@@ -299,7 +461,9 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _isPlayingTone ? FontAwesomeIcons.towerCell : FontAwesomeIcons.towerCell,
+                      _isPlayingTone
+                          ? FontAwesomeIcons.towerCell
+                          : FontAwesomeIcons.towerCell,
                       color: Colors.white,
                       size: 28,
                     ),
@@ -316,11 +480,37 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Código Morse:', style: TextStyle(fontSize: 20, color: Colors.lightBlue)),
+                const Text(
+                  'Morse:',
+                  style: TextStyle(fontSize: 20, color: Colors.lightBlue),
+                ),
                 ElevatedButton.icon(
                   onPressed: _clearAll,
                   icon: const Icon(Icons.clear, color: Colors.red),
-                  label: const Text('Limpar', style: TextStyle(color: Colors.blue)),
+                  label: const Text(
+                    'Limpar',
+                    style: TextStyle(color: Colors.blue),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Colors.blue, width: 2),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _isLooping = !_isLooping;
+                    });
+                    if (_isLooping) {
+                      _startLoopPlayback();
+                    }
+                  },
+                  icon: Icon(_isLooping ? Icons.stop : Icons.repeat),
+                  label: Text(_isLooping ? 'Stop' : 'Loop'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
@@ -334,7 +524,9 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              _morseSequence,
+              _isLooping && _loopingMorseDisplay.isNotEmpty
+                  ? _loopingMorseDisplay
+                  : _morseSequence,
               style: const TextStyle(fontSize: 35, color: Colors.lightBlue),
               textAlign: TextAlign.center,
             ),
@@ -372,40 +564,45 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 children: [
                   const TextSpan(
                     text: 'Caractere: ',
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
-
                   TextSpan(
                     text: _translatedLetter,
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: _translatedLetter == '?' ? Colors.red : Colors.green,
+                      color: _translatedLetter == '?'
+                          ? Colors.red
+                          : Colors.green,
                     ),
                   ),
                 ],
               ),
               textAlign: TextAlign.center,
             ),
-
-            Center(child:
-            Row(children: [
-              Text('Rx', style: TextStyle(color: Colors.lightBlue),),
-              const SizedBox(width: 10),
-              LedIndicator(
-                isOn: _blinkCharLed,
-                onColor: Colors.amber,
-                offColor: const Color(0xFF250032),
-                size: 8, // LED pequena e discreta
+            Center(
+              child: Row(
+                children: [
+                  Text('Rx', style: TextStyle(color: Colors.lightBlue)),
+                  const SizedBox(width: 10),
+                  LedIndicator(
+                    isOn: _blinkCharLed,
+                    onColor: Colors.amber,
+                    offColor: const Color(0xFF250032),
+                    size: 8, // LED pequena e discreta
+                  ),
+                ],
               ),
-
-            ],),
-                ),
-
-
-
+            ),
             const SizedBox(height: 24),
-            const Text('Histórico:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text(
+              'Histórico:',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
@@ -414,7 +611,10 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                 itemBuilder: (_, i) {
                   final isLast = i == _history.length - 1;
                   return ListTile(
-                    leading: Text('${i + 1}', style: const TextStyle(fontSize: 18)),
+                    leading: Text(
+                      '${i + 1}',
+                      style: const TextStyle(fontSize: 18),
+                    ),
                     title: Row(
                       children: [
                         Text(_history[i], style: const TextStyle(fontSize: 24)),
@@ -429,12 +629,10 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                         ],
                       ],
                     ),
-
                   );
                 },
               ),
             ),
-
             const SizedBox(height: 16),
             Center(
               child: GestureDetector(
@@ -458,7 +656,11 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                         : [],
                   ),
                   alignment: Alignment.center,
-                  child: const Icon(Icons.radio_button_checked, size: 40, color: Colors.white),
+                  child: const Icon(
+                    Icons.radio_button_checked,
+                    size: 40,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
