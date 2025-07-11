@@ -6,8 +6,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:vibration/vibration.dart';
 import 'package:another_flushbar/flushbar.dart';
 import 'package:flutter/services.dart';
-
-const platform = MethodChannel('morse.audio.channel'); // canal de comunicação nativo
 bool _showedLimitSnackBar = false;
 final List<String> _recordedMorse = [];
 bool _isLooping = false;
@@ -80,21 +78,9 @@ class MorseWithButtonApp extends StatelessWidget {
 //   }
 // }
 
-Future<void> startToneReal(int freqHz) async {
-  try {
-    await platform.invokeMethod('startTone', {'freq': freqHz});
-  } on PlatformException catch (e) {
-    debugPrint("Erro ao iniciar tom real: ${e.message}");
-  }
-}
 
-Future<void> stopToneReal() async {
-  try {
-    await platform.invokeMethod('stopTone');
-  } on PlatformException catch (e) {
-    debugPrint("Erro ao parar tom real: ${e.message}");
-  }
-}
+
+
 
 
 
@@ -212,7 +198,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     await _audioPlayer.stop();
 
     if (_selectedTone == 'tone_real') {
-      await startToneReal(900); // ou use outro valor do dropdown se desejar
+
     } else {
       await _audioPlayer.setReleaseMode(ReleaseMode.stop);
       await _audioPlayer.play(AssetSource('sounds/$_selectedTone'));
@@ -225,7 +211,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
 
   Future<void> _stopTone() async {
     if (_selectedTone == 'tone_real') {
-      await stopToneReal();
+
     } else {
       await _audioPlayer.stop();
     }
@@ -244,7 +230,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
     _pressStartTime = DateTime.now();
     _pauseTimer?.cancel();
     _startTone();
-    await platform.invokeMethod('startTone', {'freq': 900});
+
     await vibrateShort();
   }
 
@@ -312,7 +298,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
 
     if (_morseSequence.length < 6) { // limite de 6 sinais
       final signal = duration.inMilliseconds < 300 ? '.' : '-';
-      platform.invokeMethod('stopTone');
+
       setState(() {
         _morseSequence += signal;
         _showedLimitSnackBar = false;
@@ -591,7 +577,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                   const SizedBox(width: 10),
                   LedIndicator(
                     isOn: _blinkCharLed,
-                    onColor: Colors.amber,
+                    onColor: Colors.purpleAccent,
                     offColor: const Color(0xFF250032),
                     size: 8, // LED pequena e discreta
                   ),
@@ -658,7 +644,7 @@ class _MorseTranslatorPageState extends State<MorseTranslatorPage> {
                   alignment: Alignment.center,
                   child: const Icon(
                     Icons.radio_button_checked,
-                    size: 40,
+                    size: 60,
                     color: Colors.white,
                   ),
                 ),
